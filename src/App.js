@@ -10,17 +10,22 @@ function App() {
   const [transitionDuration, setTransitionDuration] = useState(1000);
 
   useEffect(() => {
-    fetch("./countries.geojson")
-      .then((res) => res.json())
-      .then(async (res) => {
-        const parsedCountries = await parseCountries(res);
+    Promise.all([fetch("./countries.geojson"), fetch("./owid-co2-data.json")])
+      .then(([countriesRes, co2Res]) =>
+        Promise.all([countriesRes.json(), co2Res.json()])
+      )
+      .then(([countries, co2Data]) => {
+        const parsedCountries = parseCountries(countries, co2Data);
         setCountries(parsedCountries);
 
         setTimeout(() => {
           setTransitionDuration(4000);
           setAltitude(
             () => (feat) =>
-              Math.max(0.1, +feat.properties.CO2_LVL?.[2018] * 7e-2)
+              Math.max(
+                0.1,
+                +feat.properties.CO2_DATA_BY_YEAR?.[2018]?.co2_per_capita * 7e-2
+              )
           );
         }, 3000);
       });
@@ -48,9 +53,9 @@ function App() {
         polygonSideColor={() => "rgba(0, 100, 0, 0.15)"}
         polygonLabel={({ properties: d }) => `
         <b>${d.ADMIN} (${d.ISO_A2})</b> <br />
-        CO2 Emissions: <i>${
-          Math.round(+d.CO2_LVL?.[2018] * 1000) / 1000
-        } (metric tons per capita)</i>
+        CO2 Emissions per capita: <i>${
+          Math.round(+d.CO2_DATA_BY_YEAR?.[2018]?.co2_per_capita * 1000) / 1000
+        } (tons)</i>
       `}
         polygonsTransitionDuration={transitionDuration}
       />
