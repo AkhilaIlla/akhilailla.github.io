@@ -1,14 +1,9 @@
 import "./App.css";
-import "./index.css";
+import { useEffect, useRef, useState } from "react";
 import Globe from "react-globe.gl";
 import chroma from "chroma-js";
 import * as d3 from "d3";
-import { useEffect, useRef, useState } from "react";
-import { parseCountries } from "./parseCountries";
-
-import Slider from "@mui/material/Slider";
-import { IconButton, ToggleButton, ToggleButtonGroup } from "@mui/material";
-import { PlayCircle } from "@mui/icons-material";
+import Denque from "denque";
 import {
   CO2,
   CO2_PER_CAPITA,
@@ -17,7 +12,11 @@ import {
   TIMELAPSE_INTERVAL,
   EMISSIONS_TYPES,
 } from "./constants";
-import Denque from "denque";
+import { parseCountries } from "./parseCountries";
+
+import Slider from "@mui/material/Slider";
+import { IconButton, ToggleButton, ToggleButtonGroup } from "@mui/material";
+import { PauseCircle, PlayCircle } from "@mui/icons-material";
 
 const getAltitudeCalculationFunction = (year, emissionsType) => (feat) => {
   const emissions = +feat.properties.CO2_DATA_BY_YEAR?.[year]?.[emissionsType];
@@ -41,8 +40,9 @@ function App() {
   const [altitude, setAltitude] = useState(0.1);
   const [transitionDuration, setTransitionDuration] = useState(1000);
   const [year, setYear] = useState(2020);
-  const timers = useRef(new Denque());
   const [emissionsType, setEmissionsType] = useState(CO2);
+  const timers = useRef(new Denque());
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Keep track of the latest year to handle edge case when user selects a year before the globe fully renders
   const latestYear = useRef(year);
@@ -83,17 +83,14 @@ function App() {
     timers.current.clear();
   };
 
-  const changeYear = (e) => {
+  const stopTimelapse = () => {
     clearTimers();
-
-    const newYear = e.target.value;
-    setYear(newYear);
-    setTransitionDuration(100);
-    setAltitude(() => getAltitudeCalculationFunction(newYear, emissionsType));
+    setIsPlaying(false);
   };
 
-  const beginTimelapse = () => {
-    if (timers.current.length) clearTimers();
+  const startTimelapse = () => {
+    if (!timers.current.isEmpty()) clearTimers();
+    setIsPlaying(true);
 
     let j = 0;
     let startYear = year === MAX_YEAR ? MIN_YEAR : year;
@@ -110,12 +107,21 @@ function App() {
     }
     setTimeout(() => {
       timers.current.clear();
+      setIsPlaying(false);
     }, j * TIMELAPSE_INTERVAL);
+  };
+
+  const changeYear = (e, newYear) => {
+    stopTimelapse();
+
+    setYear(newYear);
+    setTransitionDuration(100);
+    setAltitude(() => getAltitudeCalculationFunction(newYear, emissionsType));
   };
 
   const changeEmissionsType = (e, newEmissionsType) => {
     if (newEmissionsType !== null) {
-      clearTimers();
+      stopTimelapse();
 
       setEmissionsType(newEmissionsType);
       setTransitionDuration(100);
@@ -128,17 +134,26 @@ function App() {
       <div className="play-display">
         <IconButton
           aria-label="play"
-          onClick={beginTimelapse}
+          onClick={isPlaying ? stopTimelapse : startTimelapse}
           sx={{
             pr: 2,
           }}
         >
-          <PlayCircle
-            sx={{
-              width: 100,
-              height: 100,
-            }}
-          />
+          {isPlaying ? (
+            <PauseCircle
+              sx={{
+                width: 100,
+                height: 100,
+              }}
+            />
+          ) : (
+            <PlayCircle
+              sx={{
+                width: 100,
+                height: 100,
+              }}
+            />
+          )}
         </IconButton>
         <div className="current-year">{year}</div>
         <div className="slider-container">
@@ -193,7 +208,6 @@ function App() {
         polygonAltitude={altitude}
         polygonCapColor={(feat) => {
           const range = chroma.scale([chroma("yellow").alpha(0.5), "red"]);
-
           return range(altitude(feat)).hex();
         }}
         polygonSideColor={() => "rgba(128,128,128, 0.15)"}
