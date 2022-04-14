@@ -1,35 +1,39 @@
 import "./App.css";
 import "./index.css";
 import Globe from "react-globe.gl";
+import chroma from "chroma-js";
+import * as d3 from "d3";
 import { useEffect, useRef, useState } from "react";
 import { parseCountries } from "./parseCountries";
 
 import Slider from "@mui/material/Slider";
-import { IconButton } from "@mui/material";
+import { IconButton, ToggleButton, ToggleButtonGroup } from "@mui/material";
 import { PlayCircle } from "@mui/icons-material";
-import { MAX_YEAR, MIN_YEAR, TIMELAPSE_INTERVAL } from "./constants";
+import {
+  CO2,
+  CO2_PER_CAPITA,
+  MAX_YEAR,
+  MIN_YEAR,
+  TIMELAPSE_INTERVAL,
+  EMISSIONS_TYPES,
+} from "./constants";
+import Denque from "denque";
 
-/*
-
-THINGS TO DO:
-
-- style slider
-- style year text
-- refine scale of datapoints (log)
-- make dropdown for different data (co2 VS co2_per_capita)
-
-*/
-
-const getAltitudeCalculationFunction = (year) => (feat) =>
-  Math.max(
-    0.05,
-    getBaseLog(3, +feat.properties.CO2_DATA_BY_YEAR?.[year]?.co2) * 10e-2 -
-      10e-2
+const getAltitudeCalculationFunction = (year, emissionsType) => (feat) => {
+  const emissions = +feat.properties.CO2_DATA_BY_YEAR?.[year]?.[emissionsType];
+  return Math.max(
+    0.1,
+    (EMISSIONS_TYPES[emissionsType].shouldUseLogScale
+      ? getBaseLog(3, emissions)
+      : emissions) * EMISSIONS_TYPES[emissionsType].coefficient
   );
+};
 
 function getBaseLog(x, y) {
   return Math.log(y) / Math.log(x);
 }
+
+const colorScale = d3.scaleSequentialSqrt(d3.interpolateYlOrRd);
 
 function App() {
   const globeEl = useRef();
@@ -37,7 +41,8 @@ function App() {
   const [altitude, setAltitude] = useState(0.1);
   const [transitionDuration, setTransitionDuration] = useState(1000);
   const [year, setYear] = useState(2020);
-  const timeouts = useRef([]);
+  const timers = useRef(new Denque());
+  const [emissionsType, setEmissionsType] = useState(CO2);
 
   // Keep track of the latest year to handle edge case when user selects a year before the globe fully renders
   const latestYear = useRef(year);
@@ -55,7 +60,9 @@ function App() {
         setCountries(parsedCountries);
 
         setTimeout(() => {
-          setAltitude(() => getAltitudeCalculationFunction(latestYear.current));
+          setAltitude(() =>
+            getAltitudeCalculationFunction(latestYear.current, emissionsType)
+          );
         }, 1000);
       });
   }, []);
@@ -63,44 +70,57 @@ function App() {
   useEffect(() => {
     // Auto-rotate
     globeEl.current.controls().autoRotate = true;
-    globeEl.current.controls().autoRotateSpeed = 0.3;
+    globeEl.current.controls().autoRotateSpeed = 1.1;
 
     globeEl.current.pointOfView({ altitude: 4 }, 5000);
   }, []);
 
-  const clearTimeouts = () => {
-    for (const timeout of timeouts.current) {
-      clearTimeout(timeout);
+  const clearTimers = () => {
+    while (!timers.current.isEmpty()) {
+      let timerId = timers.current.shift();
+      clearTimeout(timerId);
     }
-    timeouts.current = [];
+    timers.current.clear();
   };
 
   const changeYear = (e) => {
-    clearTimeouts();
+    clearTimers();
 
     const newYear = e.target.value;
     setYear(newYear);
     setTransitionDuration(100);
-    setAltitude(() => getAltitudeCalculationFunction(newYear));
+    setAltitude(() => getAltitudeCalculationFunction(newYear, emissionsType));
   };
 
   const beginTimelapse = () => {
-    if (timeouts.current.length) clearTimeouts();
+    if (timers.current.length) clearTimers();
 
     let j = 0;
-    for (let i = MIN_YEAR; i <= MAX_YEAR; ++i) {
-      timeouts.current.push(
+    let startYear = year === MAX_YEAR ? MIN_YEAR : year;
+    for (let i = startYear; i <= MAX_YEAR; ++i) {
+      timers.current.push(
         setTimeout(() => {
           setYear(i);
           setTransitionDuration(TIMELAPSE_INTERVAL);
-          setAltitude(() => getAltitudeCalculationFunction(i));
+          setAltitude(() => getAltitudeCalculationFunction(i, emissionsType));
+          timers.current.shift();
         }, j * TIMELAPSE_INTERVAL)
       );
       ++j;
     }
     setTimeout(() => {
-      timeouts.current = [];
+      timers.current.clear();
     }, j * TIMELAPSE_INTERVAL);
+  };
+
+  const changeEmissionsType = (e, newEmissionsType) => {
+    if (newEmissionsType !== null) {
+      clearTimers();
+
+      setEmissionsType(newEmissionsType);
+      setTransitionDuration(100);
+      setAltitude(() => getAltitudeCalculationFunction(year, newEmissionsType));
+    }
   };
 
   return (
@@ -110,7 +130,7 @@ function App() {
           aria-label="play"
           onClick={beginTimelapse}
           sx={{
-            paddingRight: 2,
+            pr: 2,
           }}
         >
           <PlayCircle
@@ -129,9 +149,38 @@ function App() {
             step={1}
             min={MIN_YEAR}
             max={MAX_YEAR}
-            valueLabelDisplay="auto"
           />
         </div>
+        <ToggleButtonGroup
+          color="primary"
+          value={emissionsType}
+          exclusive
+          onChange={changeEmissionsType}
+          aria-label="emissions type"
+          sx={{
+            pt: 3,
+            px: 2,
+          }}
+        >
+          <ToggleButton
+            value={CO2}
+            sx={{
+              border: "1px solid white",
+              color: "white",
+            }}
+          >
+            {EMISSIONS_TYPES[CO2].buttonName}
+          </ToggleButton>
+          <ToggleButton
+            value={CO2_PER_CAPITA}
+            sx={{
+              border: "1px solid white",
+              color: "white",
+            }}
+          >
+            {EMISSIONS_TYPES[CO2_PER_CAPITA].buttonName}
+          </ToggleButton>
+        </ToggleButtonGroup>
       </div>
       <Globe
         ref={globeEl}
@@ -142,12 +191,16 @@ function App() {
           (d) => d.properties.ISO_A2 !== "AQ"
         )}
         polygonAltitude={altitude}
-        polygonCapColor={() => "rgba(128,128,128, 0.9)"}
+        polygonCapColor={(feat) => {
+          const range = chroma.scale([chroma("yellow").alpha(0.5), "red"]);
+
+          return range(altitude(feat)).hex();
+        }}
         polygonSideColor={() => "rgba(128,128,128, 0.15)"}
         polygonLabel={({ properties: d }) => `
         <b>${d.ADMIN} (${d.ISO_A2})</b> <br />
-        CO2 Emissions: <i>${
-          Math.round(+d.CO2_DATA_BY_YEAR?.[year]?.co2 * 1000) / 1000
+        ${EMISSIONS_TYPES[emissionsType].name}: <i>${
+          Math.round(+d.CO2_DATA_BY_YEAR?.[year]?.[emissionsType] * 1000) / 1000
         } (tons)</i>
       `}
         polygonsTransitionDuration={transitionDuration}
