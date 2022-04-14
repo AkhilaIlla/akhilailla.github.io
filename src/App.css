@@ -1,38 +1,37 @@
-.App {
-  text-align: center;
-}
+@import url("https://fonts.googleapis.com/css?family=Alfa+Slab+One");
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+.current-year {
+  font-family: "Alfa Slab One";
   color: white;
+  font-size: 100px;
+  user-select: none;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255) 25%,
+    rgba(38, 38, 38)
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-.App-link {
-  color: #61dafb;
+.slider-container {
+  width: 256px;
+  z-index: 1;
+  padding: 16px 16px;
+  background-color: transparent;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.play-display {
+  position: absolute !important;
+  display: flex;
+  flex-flow: row wrap;
+  width: 512px;
+  left: 10%;
+  top: 40%;
+  z-index: 1;
+  opacity: 0.7;
+}
+
+button path {
+  color: white;
 }
